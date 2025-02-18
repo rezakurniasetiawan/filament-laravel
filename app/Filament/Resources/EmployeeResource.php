@@ -2,16 +2,20 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\EmployeeResource\Pages;
-use App\Filament\Resources\EmployeeResource\RelationManagers;
-use App\Models\Employee;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables;
+use App\Models\Employee;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use Filament\Resources\Resource;
+use Filament\Tables\Actions\Action;
+use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Resources\EmployeeResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Resources\EmployeeResource\RelationManagers;
+use Illuminate\Support\Facades\Auth;
 
 class EmployeeResource extends Resource
 {
@@ -28,7 +32,8 @@ class EmployeeResource extends Resource
                 Forms\Components\TextInput::make('phone')->required(),
                 Forms\Components\TextInput::make('address')->required(),
                 Forms\Components\Select::make('position_id')
-                    ->relationship('position', 'name') // Pastikan ada relasi di Model Employee
+                    ->relationship('position', 'name')
+                    // ->relationship('position', 'name', fn($query) => $query->where('id', '1'))
                     ->searchable()
                     ->preload()
                     ->required(),
@@ -50,21 +55,35 @@ class EmployeeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\ImageColumn::make('photo')
-                ->label('Photo')
-                ->extraAttributes(['class' => 'rounded']),
-            Tables\Columns\TextColumn::make('name'),
-            Tables\Columns\TextColumn::make('email'),
-            Tables\Columns\TextColumn::make('phone'),
-            Tables\Columns\TextColumn::make('address'),
-            Tables\Columns\TextColumn::make('position.name')->label('Position'),
+                    ->label('Photo')
+                    ->circular(),
+                Tables\Columns\TextColumn::make('name'),
+                Tables\Columns\TextColumn::make('email'),
+                Tables\Columns\TextColumn::make('phone'),
+                Tables\Columns\TextColumn::make('address'),
+                Tables\Columns\TextColumn::make('position.name')
+                    ->label('Position')
             ])
             ->filters([
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
-                Tables\Actions\ViewAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->hidden(fn($record) => $record->status === 'inactive'),
+                Tables\Actions\DeleteAction::make()
+                    ->hidden(fn($record) => $record->status === 'inactive'),
+                Tables\Actions\ViewAction::make()
+                    ->hidden(fn($record) => $record->status === 'inactive'),
+                Action::make('activate')
+                    ->button()
+                    ->action(fn($record) => static::activateCase($record))
+                    ->requiresConfirmation()
+                    ->color('primary')
+                    ->modalHeading('Activate Employee')
+                    ->modalDescription('Are you sure you\'d like to activate this employee?')
+                    ->modalSubmitActionLabel('Yes, activate')
+                    ->hidden(fn($record) => $record->status === 'active')
+                    ->icon('heroicon-o-check-circle')
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -73,10 +92,32 @@ class EmployeeResource extends Resource
             ]);
     }
 
+    public static function activateCase($record)
+    {
+        $record->update(['status' => 'Active']);
+        $recipient = Auth::user();
+        Notification::make()
+            ->title('Case Activated')
+            ->success()
+            ->body("Case is now active.")
+            ->sendToDatabase($recipient);
+    }
+
+    public static function deactivateCase($record)
+    {
+        $record->update(['status' => 'Inactive']);
+        $recipient = Auth::user();
+        Notification::make()
+            ->title('Case Deactivated')
+            ->danger()
+            ->body("Case is now inactive.")
+            ->sendToDatabase($recipient);
+    }
+
     public static function getRelations(): array
     {
         return [
-            //
+            'jobdesks' => RelationManagers\JobdeskRelationManager::class,
         ];
     }
 

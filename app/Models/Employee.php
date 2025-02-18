@@ -12,4 +12,9 @@ class Employee extends Model
     {
         return $this->belongsTo(Position::class, 'position_id');
     }
+
+    public function jobdesks()
+    {
+        return $this->morphMany(Jobdesk::class, 'jobdeskable');
+    }
 }
